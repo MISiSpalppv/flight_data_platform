@@ -11,3 +11,6 @@ data/
 report/screenshots/
 report/_build/
 node_modules/
+report/*.docx
+report/*.pptx
+report/_build/
