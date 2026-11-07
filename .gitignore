@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+airflow/logs/
+data/
+*.log
+report/screenshots/
+report/_build/
+node_modules/
