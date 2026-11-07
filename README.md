@@ -1,64 +1,129 @@
-﻿# Flight Data Platform
+<div align="center">
 
-Учебный проект по дисциплине «Проектирование систем обработки больших данных»:
-data-платформа для анализа воздушного движения в реальном времени с Lakehouse-хранилищем и ИИ-агентом.
+# Flight Data Platform
 
-## Идея
+**Data-платформа для анализа воздушного движения в реальном времени**<br>
+от ADS-B сигнала самолёта до вопроса к ИИ-агенту на локальной LLM
 
-Открытый ADS-B API (adsb.lol) опрашивается продюсером, события летят в Kafka, Spark складывает их
-в Delta Lake на S3-хранилище (SeaweedFS) по слоям bronze → silver → gold, Airflow управляет расписанием,
-а Streamlit-приложение показывает дашборды и даёт задавать вопросы ИИ-агенту на локальной LLM (Ollama).
+<img src="docs/img/dashboard_map.png" alt="Дашборд с картой самолётов" width="85%">
+
+</div>
+
+## О проекте
+
+Платформа каждую минуту забирает живые данные о самолётах из открытого ADS-B API, прогоняет их через Kafka и Spark,
+складывает в lakehouse на Delta Lake по слоям **bronze → silver → gold** и превращает в аналитические витрины.
+Поверх витрин работают дашборд и ИИ-агент: он понимает вопросы на русском, сам строит SQL и отвечает только по данным платформы.
+
+Проект учебный (дисциплина «Проектирование систем обработки больших данных», НИТУ «МИСИС»), но собран как настоящий pet-проект:
+всё поднимается одной командой, данные не берутся из готового файла, а приходят из внешнего источника.
+
+**Что внутри**
+
+- живой источник: [adsb.lol](https://adsb.lol), 6 регионов, около 1500 событий за цикл опроса
+- Kafka в режиме KRaft (без Zookeeper), Kafka UI для наблюдения
+- Spark Structured Streaming + batch, идемпотентная загрузка через `MERGE`
+- Lakehouse: Delta Lake на S3-совместимом SeaweedFS
+- Airflow: конвейер запускается каждые 10 минут, справочник аэропортов обновляется раз в сутки
+- 7 витрин слоя gold, дашборд на Streamlit с картой
+- ИИ-агент: text-to-SQL на локальной `qwen3:8b` через Ollama, поддержка видеокарты с 6 ГБ
 
 ## Архитектура
 
-```
-adsb.lol API ──► Producer ──► Kafka (flights.raw) ──► Spark ──► Bronze (Delta, S3)
-                                                                   │
-                                      Airflow (оркестрация)        ▼
-                                                              Silver (очистка, типы, дедупликация)
-                                                                   │
-                                                                   ▼
-                                                              Gold (7 витрин)
-                                                                   │
-                                                  ┌────────────────┴───────────────┐
-                                                  ▼                                ▼
-                                          Streamlit-дашборды              ИИ-агент (Ollama, text-to-SQL)
-```
+<img src="docs/img/architecture.png" alt="Архитектура платформы" width="100%">
 
-| Требование ТЗ            | Реализация                                                         |
-|--------------------------|--------------------------------------------------------------------|
-| Lakehouse по слоям       | Delta Lake на SeaweedFS (S3): bronze / silver / gold               |
-| Движок обработки         | Apache Spark (PySpark, Structured Streaming + batch)               |
-| Брокер сообщений         | Apache Kafka (KRaft) + Kafka UI                                    |
-| Оркестрация              | Apache Airflow                                                     |
-| Внешний источник данных  | adsb.lol (ADS-B, живые данные) + справочник аэропортов OurAirports |
-| Витрины                  | Delta-таблицы слоя gold                                            |
-| ИИ-агент                 | Streamlit + Ollama (qwen3:8b), запросы к витринам через DuckDB     |
+| Требование ТЗ            | Реализация                                                          |
+|--------------------------|---------------------------------------------------------------------|
+| Lakehouse по слоям       | Delta Lake на SeaweedFS (S3): bronze / silver / gold                |
+| Движок обработки         | Apache Spark (PySpark, Structured Streaming + batch)                |
+| Брокер сообщений         | Apache Kafka (KRaft) + Kafka UI                                     |
+| Оркестрация              | Apache Airflow                                                      |
+| Внешний источник данных  | adsb.lol (ADS-B, живые данные) + справочник аэропортов OurAirports  |
+| Витрины                  | Delta-таблицы слоя gold                                             |
+| ИИ-агент                 | Streamlit + Ollama (qwen3:8b), запросы к витринам через DuckDB      |
 
-## Витрины (gold)
+## Как это работает
+
+### 1. Сбор данных и Kafka
+
+Продюсер ([`producer/producer.py`](producer/producer.py)) опрашивает шесть регионов с плотным движением
+(Франкфурт, Лондон, Стамбул, Нью-Йорк, Дубай, Сингапур) и публикует состояние каждого самолёта отдельным JSON-событием
+в топик `flights.raw`. Ключ сообщения: ICAO24 борта, поэтому события одного самолёта попадают в одну партицию и не теряют порядок.
+
+<img src="docs/img/kafka_ui.png" alt="Kafka UI" width="85%">
+
+### 2. Lakehouse: три слоя
+
+| Слой       | Что хранит                                                       | Как строится                                            |
+|------------|------------------------------------------------------------------|---------------------------------------------------------|
+| **bronze** | сырые события Kafka как есть, плюс партиция, смещение, время     | Structured Streaming, режим `availableNow`, append      |
+| **silver** | типизированные позиции: разбор JSON, фильтры, дедупликация       | потоковое чтение bronze, `MERGE` по (борт, время позиции) |
+| **gold**   | 7 витрин для аналитики и агента                                  | batch-пересчёт из silver                                |
+
+<img src="docs/img/bronze_sample.png" alt="Слой bronze" width="100%">
+<img src="docs/img/silver_sample.png" alt="Слой silver" width="85%">
+
+### 3. Оркестрация
+
+DAG `flights_lakehouse_pipeline` запускается каждые 10 минут и последовательно выполняет `bronze_ingest → silver_transform → gold_marts`.
+Параллельные запуски запрещены, неудачные задания перезапускаются. DAG `reference_airports` раз в сутки обновляет справочник аэропортов.
+
+<img src="docs/img/airflow_graph.png" alt="Граф DAG" width="70%">
+
+### 4. Витрины (gold)
 
 | Витрина                    | Содержание                                              |
 |----------------------------|---------------------------------------------------------|
-| mart_live_aircraft         | текущие позиции самолётов за последние 10 минут          |
-| mart_traffic_region_hour   | почасовой трафик по регионам                             |
-| mart_airline_activity      | борты и рейсы авиакомпаний по дням                       |
-| mart_aircraft_types        | статистика по типам воздушных судов                      |
-| mart_aircraft_daily        | сводка по каждому борту за день                          |
-| mart_emergency_events      | аварийные сигналы (squawk 7500 / 7600 / 7700)            |
-| mart_airport_activity      | прилёты и вылеты у аэропортов (справочник OurAirports)   |
+| `mart_live_aircraft`       | текущие позиции самолётов за последние 10 минут          |
+| `mart_traffic_region_hour` | почасовой трафик по регионам                             |
+| `mart_airline_activity`    | борты и рейсы авиакомпаний по дням                       |
+| `mart_aircraft_types`      | статистика по типам воздушных судов                      |
+| `mart_aircraft_daily`      | сводка по каждому борту за день                          |
+| `mart_emergency_events`    | аварийные сигналы (squawk 7500 / 7600 / 7700)            |
+| `mart_airport_activity`    | прилёты и вылеты у аэропортов (справочник OurAirports)   |
 
-## Требования
+<img src="docs/img/lake_gold.png" alt="Витрины в хранилище" width="85%">
 
-- Docker Desktop (для стека рекомендуется выделить Docker не менее 8 ГБ ОЗУ)
-- Ollama на хосте с моделью `qwen3:8b` (`ollama pull qwen3:8b`), для видеокарты с 6 ГБ подойдёт и `qwen3:4b-instruct`
+### 5. Дашборд
 
-## Запуск
+Приложение на Streamlit читает витрины напрямую из Delta-таблиц на S3 (без Spark): показатели, карта самолётов, окрашенных по высоте,
+трафик по регионам, популярные типы, авиакомпании и загруженность аэропортов.
+
+<img src="docs/img/dashboard_charts.png" alt="Графики дашборда" width="85%">
+
+### 6. ИИ-агент
+
+Агент работает по схеме **text-to-SQL**: вопрос и описание витрин попадают в локальную модель, она пишет SQL,
+запрос проверяется (разрешён только `SELECT`), выполняется в DuckDB по витринам gold, а ответ формулируется строго по полученной таблице.
+При ошибке запроса агент один раз пытается исправить его сам. Модель не придумывает данные: источник знаний, это витрины платформы.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/agent_types.png" alt="Вопрос про типы самолётов"></td>
+<td width="50%"><img src="docs/img/agent_airports.png" alt="Вопрос про аэропорты"></td>
+</tr>
+</table>
+
+Примеры вопросов: «Сколько сейчас самолётов в воздухе по регионам?», «Какая авиакомпания имеет больше всего бортов?»,
+«Какой самый загруженный аэропорт?», «Были ли аварийные сигналы?».
+
+## Быстрый старт
+
+**Нужно:** Docker Desktop (для стека выделите Docker не менее 8 ГБ ОЗУ) и [Ollama](https://ollama.com) с моделью:
 
 ```bash
+ollama pull qwen3:8b
+```
+
+Для видеокарты с 6 ГБ памяти, если `qwen3:8b` тесна, подойдёт `qwen3:4b-instruct` (укажите её в `OLLAMA_MODEL`).
+
+```bash
+git clone https://github.com/MISiSpalppv/flight_data_platform.git
+cd flight_data_platform
 cp .env.example .env
 ```
 
-В `.env` замените `AIRFLOW_FERNET_KEY` на свой ключ:
+Замените `AIRFLOW_FERNET_KEY` в `.env` на свой ключ:
 
 ```bash
 python -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
@@ -70,12 +135,20 @@ docker compose up -d --build
 
 Через 5–10 минут пройдёт первый запуск DAG, и витрины появятся в gold.
 
-| Сервис          | Адрес                  | Доступ                                  |
-|-----------------|------------------------|-----------------------------------------|
-| Дашборд и агент | http://localhost:8501  |                                         |
+| Сервис          | Адрес                  | Доступ                                                    |
+|-----------------|------------------------|-----------------------------------------------------------|
+| Дашборд и агент | http://localhost:8501  |                                                           |
 | Airflow         | http://localhost:8081  | `AIRFLOW_ADMIN_USER` / `AIRFLOW_ADMIN_PASSWORD` из `.env` |
-| Kafka UI        | http://localhost:8080  |                                         |
-| Файлы lakehouse | http://localhost:8888  | каталог `buckets/lakehouse`             |
+| Kafka UI        | http://localhost:8080  |                                                           |
+| Файлы lakehouse | http://localhost:8888  | каталог `buckets/lakehouse`                               |
+
+<details>
+<summary>Скриншоты Airflow</summary>
+
+<img src="docs/img/airflow_dags.png" alt="Список DAG" width="100%">
+<img src="docs/img/airflow_runs.png" alt="История запусков" width="100%">
+
+</details>
 
 ## Структура репозитория
 
@@ -83,7 +156,16 @@ docker compose up -d --build
 producer/        продюсер: ADS-B API -> Kafka
 spark_jobs/      Spark-задания: bronze_ingest, silver_transform, gold_marts, ref_airports
 airflow/dags/    DAG-и оркестрации
-app/             Streamlit-приложение и ИИ-агент
+app/             Streamlit-приложение и ИИ-агент (agent.py, lake.py)
 docker/          Dockerfile и вспомогательные файлы сервисов
+docs/img/        иллюстрации для README
 report/          генераторы скриншотов, отчёта и презентации
 ```
+
+## Заметки и ограничения
+
+- Расчёт слоя gold полный (витрины перезаписываются целиком), для масштаба учебного проекта этого достаточно.
+- Данные adsb.lol зависят от покрытия ADS-B приёмников: над частью регионов самолётов видно меньше (например, над Россией).
+- Агент использует небольшую локальную модель, поэтому на нестандартные формулировки может ошибаться;
+  в промпт добавлены примеры запросов к витринам, а SQL всегда показывается рядом с ответом.
+- Для S3 используется SeaweedFS: официальные образы MinIO больше не публикуются в Docker Hub.
