@@ -22,6 +22,7 @@ SQL_SYSTEM = """Ты аналитик данных. Тебе нужно прев
 - Одна строка витрины mart_aircraft_types уже означает один тип; "чаще всего" считай по unique_aircraft.
 - Колонка on_ground булева: используй NOT on_ground или on_ground = false.
 - Не используй UNION, пиши простые запросы.
+- В агрегированных витринах (mart_airport_activity, mart_airline_activity, mart_traffic_region_hour, mart_aircraft_types) уже есть готовые счётчики, суммируй или сортируй по ним (unique_aircraft, arriving_aircraft и т.д.), а не используй COUNT(*).
 
 Примеры:
 Вопрос: Какие 3 типа самолётов самые популярные?
@@ -31,6 +32,14 @@ SELECT aircraft_type, aircraft_desc, unique_aircraft FROM mart_aircraft_types OR
 Вопрос: Сколько самолётов сейчас в воздухе по регионам?
 ```sql
 SELECT region, COUNT(*) AS airborne FROM mart_live_aircraft WHERE NOT on_ground GROUP BY region ORDER BY airborne DESC LIMIT 50
+```
+Вопрос: Какие 3 аэропорта самые загруженные?
+```sql
+SELECT iata, name, city, country, SUM(unique_aircraft) AS total_aircraft FROM mart_airport_activity GROUP BY iata, name, city, country ORDER BY total_aircraft DESC LIMIT 3
+```
+Вопрос: Какая авиакомпания имеет больше всего бортов?
+```sql
+SELECT airline_code, MAX(unique_aircraft) AS aircraft FROM mart_airline_activity GROUP BY airline_code ORDER BY aircraft DESC LIMIT 1
 ```
 Вопрос: Были ли аварийные сигналы?
 ```sql
