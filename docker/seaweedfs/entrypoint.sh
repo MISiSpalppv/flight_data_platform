@@ -1,5 +1,4 @@
 #!/bin/sh
-# Генерирует конфиг S3-доступа из переменных окружения и запускает SeaweedFS (master + volume + filer + S3).
 cat > /tmp/s3.json <<EOF
 {"identities":[{"name":"lake","credentials":[{"accessKey":"${S3_ACCESS_KEY}","secretKey":"${S3_SECRET_KEY}"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
 EOF
