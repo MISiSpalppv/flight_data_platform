@@ -10,15 +10,18 @@ from pptx.util import Inches, Pt
 SHOTS = Path(__file__).parent / "screenshots"
 BUILD = Path(__file__).parent / "_build"
 BUILD.mkdir(exist_ok=True)
-OUT = Path(__file__).parent / "Презентация_Flight_Data_Platform.pptx"
+OUT = Path(__file__).parent / "Презентация_Flight_Data_Platform_v2.pptx"
 
-BG = RGBColor(0x0F, 0x1B, 0x2D)
-CARD = RGBColor(0x17, 0x28, 0x40)
-ACCENT = RGBColor(0x38, 0xBD, 0xF8)
-ORANGE = RGBColor(0xF5, 0x9E, 0x0B)
+PAPER = RGBColor(0xF5, 0xF2, 0xEB)
+INK = RGBColor(0x16, 0x1F, 0x33)
+ORANGE = RGBColor(0xE8, 0x5D, 0x04)
+BLUE = RGBColor(0x1D, 0x4E, 0x89)
+MUTED = RGBColor(0x6B, 0x72, 0x80)
+LINE = RGBColor(0xD6, 0xD1, 0xC4)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-MUTED = RGBColor(0xA9, 0xB8, 0xCC)
-FONT = "Segoe UI"
+HEAD_FONT = "Georgia"
+BODY_FONT = "Segoe UI"
+MONO_FONT = "Consolas"
 
 prs = Presentation()
 prs.slide_width = Inches(13.333)
@@ -33,253 +36,197 @@ def crop(name, box, out_name):
     return BUILD / f"{out_name}.png"
 
 
-def new_slide(title, number=None):
-    s = prs.slides.add_slide(BLANK)
-    s.background.fill.solid()
-    s.background.fill.fore_color.rgb = BG
-    bar = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.6), Inches(0.5), Inches(0.12), Inches(0.62))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = ACCENT
-    bar.line.fill.background()
-    text(s, title, 0.9, 0.4, 11.5, 0.85, size=32, bold=True)
-    if number:
-        text(s, str(number), 12.2, 6.95, 0.7, 0.4, size=12, color=MUTED, align=PP_ALIGN.RIGHT)
-    return s
+def rect(slide, x, y, w, h, color):
+    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = color
+    shape.line.fill.background()
+    shape.shadow.inherit = False
+    return shape
 
 
-def text(slide, content, x, y, w, h, size=18, bold=False, color=WHITE, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP):
+def text(slide, content, x, y, w, h, size=18, bold=False, color=INK, font=BODY_FONT,
+         align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, spacing=None):
     box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     tf = box.text_frame
     tf.word_wrap = True
     tf.vertical_anchor = anchor
-    tf.margin_left = tf.margin_right = Inches(0.05)
+    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
     lines = content if isinstance(content, list) else [content]
     for i, line in enumerate(lines):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.alignment = align
+        if spacing:
+            p.space_after = Pt(spacing)
         r = p.add_run()
         r.text = line
         r.font.size = Pt(size)
         r.font.bold = bold
-        r.font.name = FONT
+        r.font.name = font
         r.font.color.rgb = color
     return box
 
 
-def bullets(slide, items, x, y, w, h, size=18):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    tf = box.text_frame
-    tf.word_wrap = True
-    for i, item in enumerate(items):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.space_after = Pt(10)
-        dot = p.add_run()
-        dot.text = "●  "
-        dot.font.size = Pt(size - 6)
-        dot.font.color.rgb = ACCENT
-        dot.font.name = FONT
-        r = p.add_run()
-        r.text = item
-        r.font.size = Pt(size)
-        r.font.name = FONT
-        r.font.color.rgb = WHITE
-    return box
+def new_slide(number, label, title):
+    s = prs.slides.add_slide(BLANK)
+    s.background.fill.solid()
+    s.background.fill.fore_color.rgb = PAPER
+    text(s, f"{number:02d}", 0.7, 0.5, 0.9, 0.5, size=16, bold=True, color=ORANGE, font=MONO_FONT)
+    text(s, label.upper(), 1.45, 0.52, 6, 0.4, size=12, color=MUTED, font=MONO_FONT)
+    text(s, title, 0.7, 0.95, 11.9, 0.9, size=34, bold=True, font=HEAD_FONT)
+    return s
 
 
-def card(slide, x, y, w, h):
-    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h))
-    shape.adjustments[0] = 0.04
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = CARD
-    shape.line.fill.background()
-    return shape
-
-
-def picture(slide, path, x, y, w, h, caption=None):
+def picture(slide, path, x, y, w, h, frame=True, align="center", valign="center"):
     img = Image.open(path)
     ratio = min(w / img.width, h / img.height)
     pw, ph = img.width * ratio, img.height * ratio
-    px, py = x + (w - pw) / 2, y + (h - ph) / 2
-    slide.shapes.add_picture(str(path), Inches(px), Inches(py), Inches(pw), Inches(ph))
-    if caption:
-        text(slide, caption, x, y + h + 0.02, w, 0.35, size=12, color=MUTED, align=PP_ALIGN.CENTER)
+    px = x + (w - pw) / 2 if align == "center" else x
+    py = y + (h - ph) / 2 if valign == "center" else y
+    pic = slide.shapes.add_picture(str(path), Inches(px), Inches(py), Inches(pw), Inches(ph))
+    if frame:
+        pic.line.color.rgb = LINE
+        pic.line.width = Pt(1)
+    return px, py, pw, ph
 
 
-def table(slide, rows, x, y, w, col_widths, size=13, row_h=0.46):
-    shape = slide.shapes.add_table(len(rows), len(rows[0]), Inches(x), Inches(y), Inches(w), Inches(row_h * len(rows)))
-    tbl = shape.table
-    for c, cw in enumerate(col_widths):
-        tbl.columns[c].width = Inches(cw)
-    for r, row in enumerate(rows):
-        tbl.rows[r].height = Inches(row_h)
-        for c, value in enumerate(row):
-            cell = tbl.cell(r, c)
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = ACCENT if r == 0 else (CARD if r % 2 else RGBColor(0x1E, 0x33, 0x50))
-            cell.text = ""
-            p = cell.text_frame.paragraphs[0]
-            run = p.add_run()
-            run.text = value
-            run.font.size = Pt(size)
-            run.font.name = FONT
-            run.font.bold = r == 0
-            run.font.color.rgb = BG if r == 0 else WHITE
-            cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-    return tbl
+def caption(slide, content, x, y, w):
+    text(slide, content, x, y, w, 0.3, size=11, color=MUTED, font=MONO_FONT)
 
 
-# 1. Титульный слайд
+# 01. Титул
 s = prs.slides.add_slide(BLANK)
 s.background.fill.solid()
-s.background.fill.fore_color.rgb = BG
-band = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, Inches(3.0), prs.slide_width, Inches(0.08))
-band.fill.solid()
-band.fill.fore_color.rgb = ACCENT
-band.line.fill.background()
-text(s, "Flight Data Platform", 0.9, 1.4, 11.5, 1.2, size=54, bold=True)
-text(s, "Data-платформа для анализа воздушного движения в реальном времени", 0.9, 3.3, 11.5, 0.9, size=26, color=ACCENT)
-text(s, "Lakehouse · Kafka · Spark · Airflow · ИИ-агент", 0.9, 4.2, 11.5, 0.6, size=20, color=MUTED)
-text(s, ["Проектирование систем обработки больших данных", "38.03.05 Бизнес-информатика, НИТУ «МИСИС»"], 0.9, 5.7, 11.5, 1.0, size=16, color=MUTED)
+s.background.fill.fore_color.rgb = PAPER
+rect(s, 0.7, 1.3, 0.9, 0.08, ORANGE)
+text(s, "Flight Data\nPlatform".split("\n"), 0.7, 1.6, 6.0, 2.4, size=56, bold=True, font=HEAD_FONT)
+text(s, "Платформа данных о воздушном движении: от ADS-B сигнала до вопроса к ИИ-агенту", 0.7, 4.15, 5.4, 1.3, size=20, color=BLUE)
+text(s, ["Проектирование систем обработки больших данных", "НИТУ «МИСИС», 38.03.05 Бизнес-информатика"], 0.7, 6.1, 5.8, 0.8, size=12, color=MUTED, font=MONO_FONT, spacing=3)
+map_img = crop("10_dashboard_top", (416, 428, 1293, 980), "title_map")
+pic = s.shapes.add_picture(str(map_img), Inches(6.5), Inches(1.3), Inches(6.833), Inches(4.3))
+rect(s, 6.5, 5.6, 6.833, 0.55, INK)
+text(s, "самолёты над Европой и Атлантикой, данные на момент съёмки", 6.7, 5.6, 6.4, 0.55, size=12, color=WHITE, font=MONO_FONT, anchor=MSO_ANCHOR.MIDDLE)
 
-# 2. Цель и требования
-s = new_slide("Цель проекта и требования ТЗ", 2)
-bullets(
-    s,
-    [
-        "Собрать данные воздушного движения из внешнего API",
-        "Провести их через потоковый и пакетный конвейер",
-        "Хранить в lakehouse по слоям и строить витрины",
-        "Дать доступ к данным через дашборды и ИИ-агента",
-    ],
-    0.7, 1.6, 5.0, 4.5, size=20,
-)
-table(
-    s,
-    [
-        ["Требование ТЗ", "Реализация"],
-        ["Lakehouse по слоям", "Delta Lake, bronze/silver/gold"],
-        ["Движок обработки", "Apache Spark (PySpark)"],
-        ["Брокер сообщений", "Apache Kafka (KRaft)"],
-        ["Оркестрация", "Apache Airflow"],
-        ["Внешний источник", "adsb.lol API + OurAirports"],
-        ["Витрины", "7 таблиц слоя gold"],
-        ["ИИ-агент", "Ollama qwen3:8b, text-to-SQL"],
-    ],
-    6.0, 1.6, 6.7, [2.7, 4.0], size=15, row_h=0.6,
-)
-
-# 3. Архитектура
-s = new_slide("Архитектура платформы", 3)
-picture(s, SHOTS / "arch.png", 0.8, 1.35, 11.7, 5.6)
-
-# 4. Сбор данных и Kafka
-s = new_slide("Сбор данных: ADS-B API → Kafka", 4)
-bullets(
-    s,
-    [
-        "adsb.lol: открытый ADS-B API без ключа, живые данные",
-        "6 регионов, опрос каждые 60 секунд",
-        "≈1500 событий за цикл, ключ сообщения: ICAO24",
-        "Топик flights.raw: 3 партиции, режим KRaft",
-    ],
-    0.7, 1.5, 12, 2.2, size=18,
-)
-card(s, 0.6, 3.7, 5.6, 3.0)
-card(s, 6.5, 3.7, 6.2, 3.0)
-picture(s, crop("t03_producer_log", (0, 0, 1000, 300), "p_log"), 0.7, 3.8, 5.4, 2.8, "Лог продюсера")
-picture(s, crop("02_kafka_messages", (200, 60, 1500, 700), "k_msgs"), 6.6, 3.8, 6.0, 2.8, "Kafka UI: сообщения топика")
-
-# 5. Lakehouse
-s = new_slide("Lakehouse: Delta Lake на S3-хранилище", 5)
-layers = [
-    ("Bronze", "сырые события Kafka без изменений", ORANGE),
-    ("Silver", "типы, фильтры, дедупликация MERGE", MUTED),
-    ("Gold", "7 витрин для аналитики и агента", RGBColor(0xFA, 0xCC, 0x15)),
+# 02. Задача
+s = new_slide(2, "Задача", "Семь требований ТЗ, один сквозной конвейер")
+items = [
+    ("Lakehouse", "Delta Lake, слои bronze / silver / gold"),
+    ("Движок обработки", "Apache Spark"),
+    ("Брокер сообщений", "Apache Kafka"),
+    ("Оркестрация", "Apache Airflow"),
+    ("Внешний источник", "adsb.lol API и справочник OurAirports"),
+    ("Витрины", "7 таблиц слоя gold"),
+    ("ИИ-агент", "локальная qwen3:8b, text-to-SQL"),
 ]
-for i, (name, desc, color) in enumerate(layers):
-    y = 1.5 + i * 1.45
-    card(s, 0.6, y, 5.3, 1.25)
-    chip = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(y + 0.3), Inches(1.5), Inches(0.65))
+for i, (name, impl) in enumerate(items):
+    col, row = divmod(i, 4)
+    x = 0.7 + col * 6.2
+    y = 2.2 + row * 1.15
+    text(s, str(i + 1), x, y, 0.6, 0.8, size=36, bold=True, color=ORANGE, font=HEAD_FONT)
+    text(s, name, x + 0.75, y + 0.02, 5.0, 0.4, size=19, bold=True)
+    text(s, impl, x + 0.75, y + 0.45, 5.0, 0.4, size=15, color=MUTED)
+    rect(s, x, y + 0.95, 5.6, 0.01, LINE)
+text(s, "Данные не берутся из готового файла: самолёты приходят из живого API каждую минуту.", 6.9, 6.35, 5.8, 0.8, size=14, color=BLUE)
+
+# 03. Архитектура
+s = new_slide(3, "Архитектура", "Как данные проходят через систему")
+picture(s, SHOTS / "arch.png", 0.7, 1.9, 11.9, 5.2, frame=False)
+
+# 04. Сбор данных
+s = new_slide(4, "Сбор данных", "Самолёты приходят из внешнего API")
+for i, (num, label) in enumerate([("6", "регионов: Европа, США, Ближний Восток, Азия"), ("60 с", "интервал опроса adsb.lol"), ("≈1500", "событий за один цикл в Kafka")]):
+    y = 2.1 + i * 1.5
+    text(s, num, 0.7, y, 3.2, 0.9, size=48, bold=True, color=ORANGE, font=HEAD_FONT)
+    text(s, label, 0.7, y + 0.95, 3.8, 0.5, size=14, color=MUTED)
+px, py, pw, ph = picture(s, crop("02_kafka_messages", (200, 60, 1500, 760), "kafka"), 4.9, 2.0, 7.8, 4.2)
+caption(s, "Kafka UI: топик flights.raw, ключ сообщения: ICAO24 самолёта", 4.9, py + ph + 0.12, 7.8)
+
+# 05. Lakehouse
+s = new_slide(5, "Lakehouse", "Три слоя: от сырых событий к витринам")
+rows = [
+    ("BRONZE", "События Kafka как есть,\nтолько добавление", crop("t04_bronze_sample", (0, 0, 1398, 212), "l_bronze")),
+    ("SILVER", "Разбор JSON, типы, фильтры,\nдедупликация через MERGE", crop("t05_silver_sample", (0, 40, 1227, 286), "l_silver")),
+    ("GOLD", "Семь витрин в формате Delta\nв хранилище S3", crop("06_lake_gold", (150, 120, 1350, 470), "l_gold")),
+]
+colors = [RGBColor(0xB4, 0x6B, 0x2C), RGBColor(0x6B, 0x72, 0x80), RGBColor(0xC9, 0x9A, 0x06)]
+for i, (name, desc, img) in enumerate(rows):
+    y = 2.0 + i * 1.7
+    rect(s, 0.7, y, 0.09, 1.45, colors[i])
+    text(s, name, 1.0, y, 3.0, 0.45, size=22, bold=True, font=HEAD_FONT, color=colors[i])
+    text(s, desc.split("\n"), 1.0, y + 0.55, 3.4, 0.9, size=13, color=MUTED)
+    picture(s, img, 4.6, y, 8.1, 1.5, align="left")
+
+# 06. Spark и Airflow
+s = new_slide(6, "Обработка и оркестрация", "Spark считает, Airflow следит за расписанием")
+px, py, pw, ph = picture(s, SHOTS / "c04_silver.png", 0.7, 2.0, 6.4, 4.6, valign="top")
+caption(s, "silver: потоковое чтение bronze и идемпотентный MERGE", 0.7, py + ph + 0.12, 6.4)
+px, py, pw, ph = picture(s, crop("09_airflow_graph", (320, 230, 1260, 640), "air_graph"), 7.5, 2.0, 5.2, 2.6, valign="top")
+caption(s, "DAG каждые 10 минут: bronze, silver, gold", 7.5, py + ph + 0.12, 5.2)
+text(s, ["Spark Structured Streaming в режиме availableNow: смещения Kafka хранятся в контрольной точке.", "Справочник аэропортов обновляет отдельный DAG раз в сутки."], 7.5, 5.0, 5.2, 1.8, size=14, color=INK, spacing=8)
+
+# 07. Витрины
+s = new_slide(7, "Витрины", "Семь таблиц слоя gold")
+marts = [
+    ("mart_live_aircraft", "где сейчас самолёты: позиции за 10 минут"),
+    ("mart_traffic_region_hour", "трафик по регионам по часам"),
+    ("mart_airline_activity", "борты и рейсы авиакомпаний"),
+    ("mart_aircraft_types", "статистика по типам судов"),
+    ("mart_aircraft_daily", "сводка по каждому борту за день"),
+    ("mart_emergency_events", "аварийные сигналы 7500 / 7600 / 7700"),
+    ("mart_airport_activity", "прилёты и вылеты у аэропортов"),
+]
+for i, (name, desc) in enumerate(marts):
+    y = 2.1 + i * 0.7
+    text(s, name, 0.7, y, 5.2, 0.5, size=18, bold=True, color=ORANGE, font=MONO_FONT)
+    text(s, desc, 6.1, y + 0.02, 6.6, 0.5, size=17)
+    rect(s, 0.7, y + 0.55, 12.0, 0.01, LINE)
+
+# 08. Дашборд
+s = new_slide(8, "Дашборд", "Живая карта и аналитика поверх витрин")
+dash = crop("10_dashboard_top", (336, 230, 1440, 980), "dash")
+px, py, pw, ph = picture(s, dash, 0.7, 1.95, 7.4, 5.0)
+charts = crop("11_dashboard_charts", (400, 20, 1440, 560), "charts")
+picture(s, charts, 8.4, 1.95, 4.3, 2.3)
+text(s, ["Графики строятся из тех же Delta-таблиц: трафик по регионам, типы самолётов, авиакомпании, загруженность аэропортов.", "Читает приложение напрямую из S3, без Spark."], 8.4, 4.6, 4.3, 2.2, size=14, spacing=10)
+
+# 09. ИИ-агент
+s = new_slide(9, "ИИ-агент", "Вопрос на русском, ответ из данных")
+steps = ["Вопрос", "SQL по витринам", "DuckDB", "Ответ"]
+x = 0.7
+for i, step in enumerate(steps):
+    w = 2.35
+    chip = s.shapes.add_shape(MSO_SHAPE.PENTAGON if i < len(steps) - 1 else MSO_SHAPE.RECTANGLE, Inches(x), Inches(1.95), Inches(w), Inches(0.6))
     chip.fill.solid()
-    chip.fill.fore_color.rgb = color
+    chip.fill.fore_color.rgb = INK if i % 2 == 0 else BLUE
     chip.line.fill.background()
-    chip.text_frame.text = name
-    chip.text_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
-    chip.text_frame.paragraphs[0].runs[0].font.size = Pt(18)
-    chip.text_frame.paragraphs[0].runs[0].font.bold = True
-    chip.text_frame.paragraphs[0].runs[0].font.name = FONT
-    chip.text_frame.paragraphs[0].runs[0].font.color.rgb = BG
-    text(s, desc, 2.45, y + 0.2, 3.35, 0.9, size=15, anchor=MSO_ANCHOR.MIDDLE)
-card(s, 6.2, 1.5, 6.5, 4.25)
-picture(s, crop("t05_silver_sample", (0, 40, 1236, 285), "silver"), 6.3, 1.6, 6.3, 2.2, "Слой silver: типизированные позиции")
-picture(s, crop("06_lake_gold", (150, 120, 1350, 470), "gold_dir"), 6.3, 3.85, 6.3, 1.85, "Витрины слоя gold в хранилище")
-text(s, "Формат Delta: ACID-транзакции, MERGE, схема и история версий", 0.6, 6.05, 12, 0.6, size=16, color=ACCENT)
-
-# 6. Spark и Airflow
-s = new_slide("Обработка в Spark и оркестрация в Airflow", 6)
-card(s, 0.6, 1.5, 6.1, 4.9)
-picture(s, SHOTS / "c04_silver.png", 0.7, 1.6, 5.9, 4.3, "silver: потоковое чтение bronze + MERGE")
-card(s, 7.0, 1.5, 5.7, 3.1)
-picture(s, SHOTS / "09_airflow_graph.png", 7.1, 1.6, 5.5, 2.9, "DAG: bronze → silver → gold")
-bullets(
-    s,
-    ["Запуск каждые 10 минут, без параллельных прогонов", "Spark: Structured Streaming, режим availableNow", "Справочник аэропортов: отдельный DAG раз в сутки"],
-    7.0, 4.75, 5.8, 2.0, size=15,
-)
-
-# 7. Витрины
-s = new_slide("Витрины данных (слой gold)", 7)
-table(
-    s,
-    [
-        ["Витрина", "Содержание"],
-        ["mart_live_aircraft", "текущие позиции самолётов за 10 минут"],
-        ["mart_traffic_region_hour", "почасовой трафик по регионам"],
-        ["mart_airline_activity", "борты и рейсы авиакомпаний по дням"],
-        ["mart_aircraft_types", "статистика по типам воздушных судов"],
-        ["mart_aircraft_daily", "сводка по каждому борту за день"],
-        ["mart_emergency_events", "аварийные сигналы 7500 / 7600 / 7700"],
-        ["mart_airport_activity", "прилёты и вылеты у аэропортов (OurAirports)"],
-    ],
-    0.8, 1.6, 11.7, [4.4, 7.3], size=17, row_h=0.62,
-)
-
-# 8. Дашборд
-s = new_slide("Дашборд: воздушное движение в реальном времени", 8)
-card(s, 0.6, 1.4, 12.1, 5.45)
-picture(s, crop("10_dashboard_top", (336, 80, 1440, 980), "dash"), 0.7, 1.5, 11.9, 5.25)
-
-# 9. ИИ-агент
-s = new_slide("ИИ-агент: вопросы к витринам на естественном языке", 9)
-bullets(
-    s,
-    [
-        "Локальная модель qwen3:8b через Ollama",
-        "Вопрос + описание витрин → SQL-запрос",
-        "Проверка: разрешён только SELECT",
-        "Выполнение в DuckDB по таблицам gold",
-        "Самоисправление запроса при ошибке",
-        "Ответ строится только по результату запроса",
-    ],
-    0.7, 1.5, 4.9, 5.2, size=17,
-)
-card(s, 5.8, 1.4, 6.9, 5.45)
-picture(s, crop("13_agent_2", (336, 440, 1440, 840), "agent"), 5.9, 1.55, 6.7, 5.15)
+    chip.shadow.inherit = False
+    tf = chip.text_frame
+    tf.text = step
+    tf.paragraphs[0].alignment = PP_ALIGN.CENTER
+    tf.paragraphs[0].runs[0].font.size = Pt(15)
+    tf.paragraphs[0].runs[0].font.name = BODY_FONT
+    tf.paragraphs[0].runs[0].font.color.rgb = WHITE
+    x += w + 0.1
+text(s, "qwen3:8b, Ollama, только SELECT", 10.75, 1.95, 2.0, 0.6, size=10, color=MUTED, font=MONO_FONT, anchor=MSO_ANCHOR.MIDDLE)
+a1 = crop("13_agent_1", (416, 440, 1420, 1250), "agent1")
+a2 = crop("13_agent_2", (416, 440, 1420, 830), "agent2")
+picture(s, a1, 0.7, 2.85, 6.0, 4.1, valign="top")
+picture(s, a2, 6.95, 2.85, 5.75, 4.1, valign="top")
 
 # 10. Итоги
-s = new_slide("Итоги", 10)
-bullets(
-    s,
-    [
-        "Работает полный конвейер: API → Kafka → Spark → Delta Lake → витрины",
-        "Расписание и перезапуски обеспечивает Airflow",
-        "Дашборд и ИИ-агент используют только данные платформы",
-        "Всё запускается одной командой: docker compose up",
-        "Дальше: больше регионов, история за недели, оповещения о событиях",
-    ],
-    0.8, 1.7, 11.8, 4.2, size=22,
-)
-text(s, "Исходный код, Docker Compose и инструкции по запуску: репозиторий проекта", 0.8, 6.2, 11.7, 0.6, size=18, color=ACCENT)
+s = new_slide(10, "Итоги", "Что получилось")
+facts = [
+    ("1", "команда запуска: docker compose up"),
+    ("3", "слоя данных, 7 витрин, 2 DAG"),
+    ("10 мин", "цикл обновления витрин по расписанию Airflow"),
+]
+for i, (num, label) in enumerate(facts):
+    x = 0.7 + i * 4.1
+    text(s, num, x, 2.2, 3.6, 1.1, size=60, bold=True, color=ORANGE, font=HEAD_FONT)
+    text(s, label, x, 3.4, 3.5, 0.9, size=16, color=INK)
+rect(s, 0.7, 4.7, 12.0, 0.01, LINE)
+text(s, "Дальше", 0.7, 5.0, 2.0, 0.4, size=14, bold=True, color=BLUE, font=MONO_FONT)
+text(s, "больше регионов и история за недели, оповещения об аварийных сигналах, векторный поиск по описаниям витрин для агента", 2.7, 5.0, 10.0, 1.2, size=17)
 
 prs.core_properties.author = ""
 prs.core_properties.last_modified_by = ""

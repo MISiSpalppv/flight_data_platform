@@ -57,12 +57,13 @@ def architecture(name="arch"):
 
     def arrow(x1, y1, x2, y2, color=(60, 70, 90)):
         d.line([x1, y1, x2, y2], fill=color, width=4)
-        if x2 > x1:
-            d.polygon([(x2, y2), (x2 - 16, y2 - 9), (x2 - 16, y2 + 9)], fill=color)
-        elif y2 > y1:
-            d.polygon([(x2, y2), (x2 - 9, y2 - 16), (x2 + 9, y2 - 16)], fill=color)
-        else:
-            d.polygon([(x2, y2), (x2 - 9, y2 + 16), (x2 + 9, y2 + 16)], fill=color)
+        head(x2, y2, x2 - x1, y2 - y1, color)
+
+    def head(x, y, dx, dy, color=(60, 70, 90)):
+        n = (dx * dx + dy * dy) ** 0.5
+        ux, uy = dx / n, dy / n
+        bx, by = x - ux * 18, y - uy * 18
+        d.polygon([(x, y), (bx - uy * 10, by + ux * 10), (bx + uy * 10, by - ux * 10)], fill=color)
 
     d.rounded_rectangle([20, 20, W - 20, H - 20], radius=24, outline=(150, 170, 200), width=3)
     d.text((44, 32), "Docker Compose", font=f, fill=(90, 110, 150))
@@ -85,14 +86,16 @@ def architecture(name="arch"):
     arrow(1190, 240, 1190, 330)
 
     box(1420, 110, 330, 130, "Apache Airflow", ["DAG каждые 10 минут", "bronze → silver → gold"], (240, 230, 250), (140, 90, 190))
-    d.line([1420, 175, 1340, 175], fill=(140, 90, 190), width=3)
+    arrow(1420, 175, 1340, 175, color=(140, 90, 190))
     d.text((1346, 140), "запуск", font=f_s, fill=(140, 90, 190))
     d.text((1346, 182), "джобов", font=f_s, fill=(140, 90, 190))
 
     box(1420, 330, 330, 120, "Streamlit", ["дашборды: карта,", "трафик, аэропорты"], (225, 245, 245), (50, 150, 150))
     box(1420, 500, 330, 140, "ИИ-агент", ["Ollama (qwen3:8b)", "text-to-SQL, DuckDB"], (225, 245, 245), (50, 150, 150))
-    arrow(1300, 485, 1420, 400)
-    arrow(1300, 520, 1420, 560)
+    d.line([1300, 485, 1360, 485], fill=(60, 70, 90), width=4)
+    d.line([1360, 390, 1360, 570], fill=(60, 70, 90), width=4)
+    arrow(1360, 390, 1420, 390)
+    arrow(1360, 570, 1420, 570)
 
     box(60, 680, 500, 130, "OurAirports (CSV)", ["справочник аэропортов,", "ежедневная загрузка DAG"], (255, 244, 214), (230, 170, 40))
     arrow(560, 745, 700, 745)

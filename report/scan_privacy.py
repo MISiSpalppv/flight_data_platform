@@ -8,6 +8,8 @@ root = Path(__file__).parent
 
 for pattern in ("*.docx", "*.pptx"):
     for path in glob.glob(str(root / pattern)):
+        if Path(path).name.startswith("~$"):
+            continue
         z = zipfile.ZipFile(path)
         hits = []
         for name in z.namelist():
