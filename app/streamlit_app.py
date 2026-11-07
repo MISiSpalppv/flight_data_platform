@@ -44,11 +44,11 @@ with tab_dash:
         c4.metric("Средняя скорость, kt", f"{airborne['speed_kt'].mean():,.0f}")
 
         st.subheader("Карта самолётов")
-        fig = px.scatter_map(
+        fig = px.scatter_mapbox(
             airborne.dropna(subset=["lat", "lon"]),
             lat="lat", lon="lon", color="altitude_ft", color_continuous_scale="Turbo",
             hover_name="callsign", hover_data=["aircraft_type", "altitude_ft", "speed_kt", "region"],
-            zoom=2, height=560, map_style="open-street-map",
+            zoom=2, height=560, mapbox_style="open-street-map",
         )
         fig.update_traces(marker={"size": 6})
         fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
@@ -58,7 +58,7 @@ with tab_dash:
     if not traffic.empty:
         with left:
             st.subheader("Трафик по регионам")
-            fig = px.line(traffic.sort_values("hour"), x="hour", y="unique_aircraft", color="region", markers=True)
+            fig = px.bar(traffic.sort_values("hour"), x="hour", y="unique_aircraft", color="region", barmode="group")
             st.plotly_chart(fig, use_container_width=True)
     types = marts.get("mart_aircraft_types")
     if types is not None and not types.empty:

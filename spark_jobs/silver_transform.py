@@ -31,7 +31,7 @@ EVENT_SCHEMA = T.StructType([
 def transform(df):
     parsed = df.select(F.from_json("payload", EVENT_SCHEMA).alias("e"), "kafka_ts").select("e.*", "kafka_ts")
 
-    on_ground = F.col("alt_baro") == "ground"
+    on_ground = F.coalesce(F.col("alt_baro") == "ground", F.lit(False))
     alt_ft = F.when(on_ground, F.lit(0)).otherwise(F.col("alt_baro").cast("double"))
     position_ts = F.to_timestamp(
         F.from_unixtime(F.col("api_ts_ms") / 1000 - F.coalesce(F.col("seen_pos"), F.lit(0.0)))

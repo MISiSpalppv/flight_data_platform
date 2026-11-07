@@ -30,7 +30,10 @@ def storage_options():
 
 def load_mart(name):
     table = DeltaTable(f"s3://{BUCKET}/gold/{name}", storage_options=storage_options())
-    return table.to_pandas()
+    df = table.to_pandas()
+    if "on_ground" in df.columns:
+        df["on_ground"] = df["on_ground"].fillna(False).astype(bool)
+    return df
 
 
 def available_marts():

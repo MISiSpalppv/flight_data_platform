@@ -132,7 +132,11 @@ def airport_activity(pos, airports):
 
 def main():
     spark = get_spark("gold_marts")
-    pos = spark.read.format("delta").load(SILVER_FLIGHTS).cache()
+    pos = (
+        spark.read.format("delta").load(SILVER_FLIGHTS)
+        .withColumn("on_ground", F.coalesce("on_ground", F.lit(False)))
+        .cache()
+    )
 
     save(live_aircraft(pos), "mart_live_aircraft")
     save(traffic_by_region_hour(pos), "mart_traffic_region_hour")
